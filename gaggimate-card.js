@@ -24,7 +24,6 @@ class GaggiMateCard extends LitElement {
     return {
       hass: { type: Object },
       config: { type: Object },
-      _device: { type: Object },
       _entities: { type: Object },
     };
   }
@@ -35,7 +34,7 @@ class GaggiMateCard extends LitElement {
 
   static getStubConfig() {
     return {
-      device_id: '',
+      entity: '',
       name: 'GaggiMate',
       show_profile: true,
       show_weight: true,
@@ -54,18 +53,90 @@ class GaggiMateCard extends LitElement {
       show_controls: true,
       ...config,
     };
+    
+    // If device_id is set, fetch entities
+    if (config.device_id) {
+      this._updateDeviceEntities();
+    } else if (config.entity) {
+      // If entity is set, derive entities from the base entity
+      this._deriveEntitiesFromBase(config.entity);
+    }
   }
 
   connectedCallback() {
     super.connectedCallback();
-    this._updateDeviceEntities();
+    if (this.config?.device_id) {
+      this._updateDeviceEntities();
+    } else if (this.config?.entity) {
+      this._deriveEntitiesFromBase(this.config.entity);
+    }
   }
 
   updated(changedProperties) {
     super.updated(changedProperties);
-    if (changedProperties.has('config') || changedProperties.has('hass')) {
-      this._updateDeviceEntities();
+    if (changedProperties.has('hass') && this.hass) {
+      if (this.config?.device_id && !this._entities) {
+        this._updateDeviceEntities();
+      } else if (this.config?.entity && !this._entities) {
+        this._deriveEntitiesFromBase(this.config.entity);
+      }
     }
+  }
+
+  _deriveEntitiesFromBase(baseEntity) {
+    if (!this.hass || !baseEntity) {
+      this._entities = {};
+      return;
+    }
+
+    // Extract the base name from the entity (e.g., "sensor.gaggimate_current_temperature" -> "gaggimate")
+    const parts = baseEntity.split('.');
+    if (parts.length < 2) {
+      this._entities = {};
+      return;
+    }
+
+    const entityId = parts[1];
+    const baseName = entityId.split('_')[0]; // e.g., "gaggimate"
+
+    // Get all entities from hass
+    const allEntities = Object.keys(this.hass.states);
+
+    // Find entities that match the base name
+    const matchingEntities = allEntities.filter(id => id.includes(baseName));
+
+    this._entities = {
+      currentTemp: this._findEntityInList(matchingEntities, 'current_temperature', 'sensor'),
+      targetTemp: this._findEntityInList(matchingEntities, 'target_temperature', 'sensor'),
+      mode: this._findEntityInList(matchingEntities, 'mode', 'sensor'),
+      profile: this._findEntityInList(matchingEntities, ['profile', 'selected_profile'], 'sensor'),
+      weight: this._findEntityInList(matchingEntities, ['weight', 'current_weight'], 'sensor'),
+      machineActive: this._findEntityInList(matchingEntities, 'machine_active', 'switch'),
+      modeSelect: this._findEntityInList(matchingEntities, 'mode', 'select'),
+      profileSelect: this._findEntityInList(matchingEntities, ['profile', 'selected_profile'], 'select'),
+      targetTempNumber: this._findEntityInList(matchingEntities, 'target_temperature', 'number'),
+      startBrew: this._findEntityInList(matchingEntities, 'start_brew', 'button'),
+      stopBrew: this._findEntityInList(matchingEntities, 'stop_brew', 'button'),
+      startSteam: this._findEntityInList(matchingEntities, 'start_steam', 'button'),
+      flush: this._findEntityInList(matchingEntities, 'flush', 'button'),
+    };
+
+    console.log('Derived entities:', this._entities);
+  }
+
+  _findEntityInList(entities, keywords, domain) {
+    const keywordArray = Array.isArray(keywords) ? keywords : [keywords];
+    
+    for (const entityId of entities) {
+      const entityDomain = entityId.split('.')[0];
+      if (entityDomain !== domain) continue;
+
+      const lowerId = entityId.toLowerCase();
+      if (keywordArray.some(keyword => lowerId.includes(keyword.toLowerCase()))) {
+        return entityId;
+      }
+    }
+    return null;
   }
 
   async _updateDeviceEntities() {
@@ -75,18 +146,6 @@ class GaggiMateCard extends LitElement {
     }
 
     try {
-      const devices = await this.hass.callWS({
-        type: 'config/device_registry/list',
-      });
-
-      const device = devices.find((d) => d.id === this.config.device_id);
-      if (!device) {
-        this._entities = {};
-        return;
-      }
-
-      this._device = device;
-
       const entities = await this.hass.callWS({
         type: 'config/entity_registry/list',
       });
@@ -95,43 +154,42 @@ class GaggiMateCard extends LitElement {
         (e) => e.device_id === this.config.device_id
       );
 
+      console.log('Found device entities:', deviceEntities);
+
       this._entities = {
-        currentTemp: this._findEntity(deviceEntities, 'current_temperature'),
-        targetTemp: this._findEntity(deviceEntities, 'target_temperature'),
-        mode: this._findEntity(deviceEntities, 'mode'),
-        profile: this._findEntity(deviceEntities, 'profile', 'selected_profile'),
-        weight: this._findEntity(deviceEntities, 'weight', 'current_weight'),
-        machineActive: this._findEntity(deviceEntities, 'machine_active'),
-        modeSelect: this._findEntity(deviceEntities, 'mode', null, 'select'),
-        profileSelect: this._findEntity(deviceEntities, 'profile', 'selected_profile', 'select'),
-        targetTempNumber: this._findEntity(deviceEntities, 'target_temperature', null, 'number'),
-        startBrew: this._findEntity(deviceEntities, 'start_brew', null, 'button'),
-        stopBrew: this._findEntity(deviceEntities, 'stop_brew', null, 'button'),
-        startSteam: this._findEntity(deviceEntities, 'start_steam', null, 'button'),
-        flush: this._findEntity(deviceEntities, 'flush', null, 'button'),
+        currentTemp: this._findEntity(deviceEntities, 'current_temperature', 'sensor'),
+        targetTemp: this._findEntity(deviceEntities, 'target_temperature', 'sensor'),
+        mode: this._findEntity(deviceEntities, 'mode', 'sensor'),
+        profile: this._findEntity(deviceEntities, ['profile', 'selected_profile'], 'sensor'),
+        weight: this._findEntity(deviceEntities, ['weight', 'current_weight'], 'sensor'),
+        machineActive: this._findEntity(deviceEntities, 'machine_active', 'switch'),
+        modeSelect: this._findEntity(deviceEntities, 'mode', 'select'),
+        profileSelect: this._findEntity(deviceEntities, ['profile', 'selected_profile'], 'select'),
+        targetTempNumber: this._findEntity(deviceEntities, 'target_temperature', 'number'),
+        startBrew: this._findEntity(deviceEntities, 'start_brew', 'button'),
+        stopBrew: this._findEntity(deviceEntities, 'stop_brew', 'button'),
+        startSteam: this._findEntity(deviceEntities, 'start_steam', 'button'),
+        flush: this._findEntity(deviceEntities, 'flush', 'button'),
       };
+
+      console.log('Mapped entities:', this._entities);
     } catch (error) {
       console.error('Error fetching device entities:', error);
       this._entities = {};
     }
   }
 
-  _findEntity(entities, ...keywords) {
-    const domain = keywords[keywords.length - 1];
-    const isValidDomain = ['sensor', 'switch', 'select', 'number', 'button'].includes(domain);
-    const searchKeywords = isValidDomain ? keywords.slice(0, -1) : keywords;
-    const targetDomain = isValidDomain ? domain : null;
+  _findEntity(entities, keywords, domain) {
+    const keywordArray = Array.isArray(keywords) ? keywords : [keywords];
 
     for (const entity of entities) {
       const entityId = entity.entity_id;
       const entityDomain = entityId.split('.')[0];
 
-      if (targetDomain && entityDomain !== targetDomain) {
-        continue;
-      }
+      if (entityDomain !== domain) continue;
 
       const lowerId = entityId.toLowerCase();
-      if (searchKeywords.some((keyword) => lowerId.includes(keyword.toLowerCase()))) {
+      if (keywordArray.some((keyword) => lowerId.includes(keyword.toLowerCase()))) {
         return entityId;
       }
     }
@@ -150,7 +208,7 @@ class GaggiMateCard extends LitElement {
   }
 
   _togglePower() {
-    if (this._entities.machineActive) {
+    if (this._entities?.machineActive) {
       this.hass.callService('switch', 'toggle', {
         entity_id: this._entities.machineActive,
       });
@@ -159,7 +217,7 @@ class GaggiMateCard extends LitElement {
 
   _handleModeChange(e) {
     const mode = e.target.value;
-    if (this._entities.modeSelect) {
+    if (this._entities?.modeSelect) {
       this._callService('select', 'select_option', this._entities.modeSelect, {
         option: mode,
       });
@@ -168,7 +226,7 @@ class GaggiMateCard extends LitElement {
 
   _handleProfileChange(e) {
     const profile = e.target.value;
-    if (this._entities.profileSelect) {
+    if (this._entities?.profileSelect) {
       this._callService('select', 'select_option', this._entities.profileSelect, {
         option: profile,
       });
@@ -177,7 +235,7 @@ class GaggiMateCard extends LitElement {
 
   _handleTargetTempChange(e) {
     const temp = parseFloat(e.target.value);
-    if (this._entities.targetTempNumber && !isNaN(temp)) {
+    if (this._entities?.targetTempNumber && !isNaN(temp)) {
       this._callService('number', 'set_value', this._entities.targetTempNumber, {
         value: temp,
       });
@@ -185,34 +243,51 @@ class GaggiMateCard extends LitElement {
   }
 
   _startBrew() {
-    if (this._entities.startBrew) {
+    if (this._entities?.startBrew) {
       this._callService('button', 'press', this._entities.startBrew);
     }
   }
 
   _stopBrew() {
-    if (this._entities.stopBrew) {
+    if (this._entities?.stopBrew) {
       this._callService('button', 'press', this._entities.stopBrew);
     }
   }
 
   _startSteam() {
-    if (this._entities.startSteam) {
+    if (this._entities?.startSteam) {
       this._callService('button', 'press', this._entities.startSteam);
     }
   }
 
   _flush() {
-    if (this._entities.flush) {
+    if (this._entities?.flush) {
       this._callService('button', 'press', this._entities.flush);
     }
   }
 
   render() {
-    if (!this.hass || !this.config.device_id) {
+    if (!this.hass) {
+      return html`<ha-card><div class="warning">Loading...</div></ha-card>`;
+    }
+
+    if (!this.config.device_id && !this.config.entity) {
       return html`
         <ha-card>
-          <div class="warning">Please configure the device in the card settings.</div>
+          <div class="warning">
+            Please configure the card.<br/>
+            Select any GaggiMate entity in the card editor.
+          </div>
+        </ha-card>
+      `;
+    }
+
+    if (!this._entities || Object.keys(this._entities).length === 0) {
+      return html`
+        <ha-card>
+          <div class="warning">
+            No entities found. Make sure your GaggiMate integration is working.
+          </div>
         </ha-card>
       `;
     }
@@ -240,11 +315,13 @@ class GaggiMateCard extends LitElement {
       <ha-card>
         <div class="card-header">
           <div class="name">${this.config.name}</div>
-          <ha-icon-button
-            .path=${'M10,21V19H6.41L10.91,14.5L9.5,13.09L5,17.59V14H3V21H10M14.5,10.91L19,6.41V10H21V3H14V5H17.59L13.09,9.5L14.5,10.91Z'}
-            @click=${this._togglePower}
-            class=${isActive ? 'active' : ''}
-          ></ha-icon-button>
+          ${this._entities.machineActive ? html`
+            <ha-icon-button
+              .path=${'M10,21V19H6.41L10.91,14.5L9.5,13.09L5,17.59V14H3V21H10M14.5,10.91L19,6.41V10H21V3H14V5H17.59L13.09,9.5L14.5,10.91Z'}
+              @click=${this._togglePower}
+              class=${isActive ? 'active' : ''}
+            ></ha-icon-button>
+          ` : ''}
         </div>
 
         <div class="content">
@@ -578,6 +655,7 @@ class GaggiMateCardEditor extends LitElement {
       hass: { type: Object },
       config: { type: Object },
       _devices: { type: Array },
+      _gaggiEntities: { type: Array },
     };
   }
 
@@ -588,6 +666,7 @@ class GaggiMateCardEditor extends LitElement {
   async connectedCallback() {
     super.connectedCallback();
     await this._loadDevices();
+    this._loadGaggiEntities();
   }
 
   async _loadDevices() {
@@ -605,10 +684,32 @@ class GaggiMateCardEditor extends LitElement {
           device.model?.toLowerCase().includes('gaggimate') ||
           device.name?.toLowerCase().includes('gaggimate')
       );
+      
+      console.log('Found GaggiMate devices:', this._devices);
     } catch (error) {
       console.error('Error loading devices:', error);
       this._devices = [];
     }
+  }
+
+  _loadGaggiEntities() {
+    if (!this.hass) return;
+
+    // Get all entities
+    const allEntities = Object.keys(this.hass.states);
+    
+    // Filter for entities that look like they're from GaggiMate
+    this._gaggiEntities = allEntities.filter(entityId => {
+      const state = this.hass.states[entityId];
+      const integration = state.attributes?.integration;
+      const name = entityId.toLowerCase();
+      
+      return integration === 'gaggimate' || 
+             name.includes('gaggimate') || 
+             name.includes('gaggia');
+    });
+    
+    console.log('Found GaggiMate entities:', this._gaggiEntities);
   }
 
   _valueChanged(ev) {
@@ -636,26 +737,61 @@ class GaggiMateCardEditor extends LitElement {
       return html``;
     }
 
+    const hasDevices = this._devices && this._devices.length > 0;
+    const hasEntities = this._gaggiEntities && this._gaggiEntities.length > 0;
+
     return html`
       <div class="card-config">
-        <div class="config-row">
-          <label for="device">Device</label>
-          <select
-            id="device"
-            .configValue=${'device_id'}
-            .value=${this.config.device_id || ''}
-            @change=${this._valueChanged}
-          >
-            <option value="">Select a GaggiMate device</option>
-            ${this._devices?.map(
-              (device) => html`
-                <option value="${device.id}" ?selected=${device.id === this.config.device_id}>
-                  ${device.name || device.id}
-                </option>
-              `
-            )}
-          </select>
-        </div>
+        ${hasDevices ? html`
+          <div class="config-row">
+            <label for="device">Device (Preferred)</label>
+            <select
+              id="device"
+              .configValue=${'device_id'}
+              .value=${this.config.device_id || ''}
+              @change=${this._valueChanged}
+            >
+              <option value="">Select a GaggiMate device</option>
+              ${this._devices.map(
+                (device) => html`
+                  <option value="${device.id}" ?selected=${device.id === this.config.device_id}>
+                    ${device.name || device.id}
+                  </option>
+                `
+              )}
+            </select>
+          </div>
+        ` : ''}
+
+        ${hasEntities ? html`
+          <div class="config-row">
+            <label for="entity">
+              ${hasDevices ? 'Or select any GaggiMate entity' : 'Select any GaggiMate entity'}
+            </label>
+            <select
+              id="entity"
+              .configValue=${'entity'}
+              .value=${this.config.entity || ''}
+              @change=${this._valueChanged}
+            >
+              <option value="">Select an entity</option>
+              ${this._gaggiEntities.map(
+                (entityId) => html`
+                  <option value="${entityId}" ?selected=${entityId === this.config.entity}>
+                    ${entityId}
+                  </option>
+                `
+              )}
+            </select>
+          </div>
+        ` : ''}
+
+        ${!hasDevices && !hasEntities ? html`
+          <div class="warning">
+            No GaggiMate devices or entities found. 
+            Make sure the GaggiMate integration is installed and configured.
+          </div>
+        ` : ''}
 
         <div class="config-row">
           <label for="name">Card Name</label>
@@ -699,6 +835,11 @@ class GaggiMateCardEditor extends LitElement {
             .checked=${this.config.show_controls !== false}
             @change=${this._valueChanged}
           />
+        </div>
+
+        <div class="info">
+          💡 <strong>Tip:</strong> If device selection doesn't work, just select any GaggiMate entity. 
+          The card will automatically find all related entities.
         </div>
       </div>
     `;
@@ -745,6 +886,24 @@ class GaggiMateCardEditor extends LitElement {
         height: 20px;
         cursor: pointer;
       }
+
+      .warning {
+        padding: 12px;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        color: #856404;
+        font-size: 0.9em;
+      }
+
+      .info {
+        padding: 12px;
+        background: #e3f2fd;
+        border: 1px solid #2196f3;
+        border-radius: 4px;
+        color: #0d47a1;
+        font-size: 0.9em;
+      }
     `;
   }
 }
@@ -762,7 +921,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c GAGGIMATE-CARD %c Version 1.0.0 ',
+  '%c GAGGIMATE-CARD %c Version 1.1.0 ',
   'color: white; background: #8B4513; font-weight: 700;',
   'color: #8B4513; background: white; font-weight: 700;'
 );
