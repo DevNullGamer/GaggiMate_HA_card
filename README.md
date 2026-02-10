@@ -2,33 +2,36 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-A custom Home Assistant card styled to match the official GaggiMate web interface. Features clean DaisyUI-inspired design with gauge displays, modern controls, and automatic entity discovery.
+A custom Lovelace card for Home Assistant to control and monitor your GaggiMate espresso machine with automatic device discovery.
 
 ## Features
 
-✨ **Official GaggiMate Styling** - Matches the original web interface design  
-🎯 **Gauge Temperature Display** - Circular gauge with live temperature readings  
-🎨 **Modern UI** - Clean, professional design with DaisyUI-inspired components  
-🔄 **Auto-Discovery** - Select any entity, card finds all related sensors  
-⚙️ **Full Controls** - Modes, profiles, brewing buttons in one place  
-📱 **Responsive** - Works beautifully on desktop and mobile  
+✨ **Visual Editor Support** - Configure using Home Assistant's visual editor  
+🎯 **Automatic Discovery** - Just select your device, all sensors auto-populate  
+🌡️ **Real-time Monitoring** - Current and target temperature display  
+☕ **Mode Control** - Switch between Brew, Steam, Hot Water, Grind  
+📊 **Profile Selection** - Display and select brewing profiles  
+⚖️ **Scale Integration** - Show weight from BLE scales  
+🎮 **Quick Controls** - One-tap brewing, steaming, flushing  
+🎨 **Beautiful UI** - Modern gradient design with color-coded modes  
 
 ## Installation
 
-### HACS
+### HACS (Recommended)
 
 1. Go to HACS → Frontend
-2. Click 3-dot menu → Custom repositories
+2. Click the 3-dot menu → Custom repositories
 3. Add: `https://github.com/DevNullGamer/GaggiMate_HA_card`
 4. Category: Lovelace
-5. Install "GaggiMate Card"
-6. Restart Home Assistant
+5. Click "Add"
+6. Find "GaggiMate Card" and install
+7. Restart Home Assistant
 
 ### Manual
 
-1. Download `gaggimate-card.js`
-2. Copy to `/config/www/`
-3. Add resource:
+1. Download `gaggimate-card.js` from [releases](https://github.com/DevNullGamer/GaggiMate_HA_card/releases)
+2. Copy to `/config/www/gaggimate-card.js`
+3. Add resource in Lovelace:
    ```yaml
    url: /local/gaggimate-card.js
    type: module
@@ -37,71 +40,47 @@ A custom Home Assistant card styled to match the official GaggiMate web interfac
 
 ## Usage
 
-### Visual Editor
-1. Add Card → Search "GaggiMate Card"
-2. Select your device OR any GaggiMate entity
-3. Customize options
-4. Save
+### Visual Editor (Easiest)
+
+1. Edit dashboard → Add Card
+2. Search "GaggiMate Card"
+3. Select your device
+4. Customize options
+5. Save
 
 ### YAML
+
 ```yaml
 type: custom:gaggimate-card
-entity: sensor.gaggimate_current_temperature
+device_id: YOUR_DEVICE_ID
 name: My GaggiMate
 show_profile: true
 show_weight: true
 show_controls: true
 ```
 
-## Design Features
-
-### Header
-- Dark gradient header with GAGGIMATE branding
-- Power status indicator
-- Clean, professional look
-
-### Gauge Display
-- Circular temperature gauge with live value
-- Smooth animations
-- Clear numeric display
-
-### Mode & Profile
-- Color-coded mode badge
-- Profile display with icon
-- Easy-to-read typography
-
-### Controls
-- DaisyUI-style buttons with hover effects
-- Clean dropdown selectors
-- Responsive grid layout
-- Color-coded actions (green=start, red=stop, etc.)
-
 ## Configuration
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `entity` | string | **Required** | Any GaggiMate entity |
-| `device_id` | string | Optional | Device ID (alternative to entity) |
+| `device_id` | string | **Required** | Your GaggiMate device ID |
 | `name` | string | `GaggiMate` | Card title |
 | `show_profile` | boolean | `true` | Show profile info |
 | `show_weight` | boolean | `true` | Show scale weight |
 | `show_controls` | boolean | `true` | Show control buttons |
 
-## Color Scheme
+## How It Works
 
-The card uses a professional color palette inspired by the GaggiMate web interface:
-
-- **Primary**: Emerald green (#10b981) - Success, active states
-- **Secondary**: Indigo (#6366f1) - Steam controls
-- **Warning**: Amber (#f59e0b) - Stop/caution actions
-- **Error**: Red (#ef4444) - Power off
-- **Accent**: Cyan (#06b6d4) - Flush operations
-- **Background**: Slate gray gradients - Professional, clean look
+The card automatically discovers ALL entities from your GaggiMate device:
+- Queries Home Assistant device registry
+- Finds all linked entities
+- Intelligently matches sensors, switches, selects, buttons
+- **No manual entity configuration needed!**
 
 ## Prerequisites
 
 - Home Assistant 2023.1.0+
-- [GaggiMate Integration](https://github.com/gaggimate/ha-integration)
+- [GaggiMate Integration](https://github.com/gaggimate/ha-integration) installed
 
 ## Support
 
@@ -110,4 +89,4 @@ The card uses a professional color palette inspired by the GaggiMate web interfa
 
 ## License
 
-MIT License
+MIT License - See [LICENSE](LICENSE)
